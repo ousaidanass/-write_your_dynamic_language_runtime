@@ -40,10 +40,14 @@ public final class ASTInterpreter {
       case Block(List<Expr> instrs, int lineNumber) -> {
 				//throw new UnsupportedOperationException("TODO Block");
         // TODO loop over all instructions
+        for (var instr: instrs) {
+          visit(instr, env);
+        }
         yield UNDEFINED;
       }
       case Literal<?>(Object value, int lineNumber) -> {
-        throw new UnsupportedOperationException("TODO Literal");
+        //throw new UnsupportedOperationException("TODO Literal");
+        yield value;
       }
       case FunCall(Expr qualifier, List<Expr> args, int lineNumber) -> {
         throw new UnsupportedOperationException("TODO FunCall");
