@@ -30,7 +30,7 @@ public class ASTInterpreterTests {
   public void helloString() {
     assertEquals("", execute("\"hello\"\n"));
   }
-/*
+
   @Tag("Q3") @Test
   public void integer3() {
     assertEquals("", execute("3\n"));
@@ -68,6 +68,8 @@ public class ASTInterpreterTests {
             print(a);
             """));
   }
+
+
   @Tag("Q8") @Test
   public void printSeveralVariables() {
     assertEquals("7\n", execute("""
@@ -232,7 +234,7 @@ public class ASTInterpreterTests {
             print(f(7));
             """));
   }
-  
+
   @Tag("Q12") @Test
   public void callFibo() {
     assertEquals("21\n", execute("""
@@ -282,7 +284,7 @@ public class ASTInterpreterTests {
             print(f());
             """));
   }
-  
+
   @Tag("Q13") @Test
   public void createAnObject() {
     assertEquals("""
@@ -300,7 +302,7 @@ public class ASTInterpreterTests {
                 print(o);
                 """));
   }
-  
+
   @Tag("Q14") @Test
   public void createAnObjectFromAVariableValue() {
     assertEquals("""
@@ -330,7 +332,7 @@ public class ASTInterpreterTests {
                 };"""));
   }
   
-  
+
   @Tag("Q15") @Test
   public void objectGetAFieldValue() {
     assertEquals(
@@ -387,5 +389,5 @@ public class ASTInterpreterTests {
                 object.foo(42);
                 object.foo(42);
                 """));
-  }*/
+  }
 }
