@@ -8,13 +8,8 @@ import static java.lang.invoke.MethodHandles.insertArguments;
 import static java.lang.invoke.MethodHandles.invoker;
 import static java.lang.invoke.MethodType.methodType;
 
-import java.lang.invoke.CallSite;
-import java.lang.invoke.ConstantCallSite;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
+import java.lang.invoke.*;
 import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.invoke.MethodType;
-import java.lang.invoke.MutableCallSite;
 
 import fr.umlv.smalljs.rt.ArrayMap;
 import fr.umlv.smalljs.rt.ArrayMap.Layout;
@@ -22,7 +17,7 @@ import fr.umlv.smalljs.rt.Failure;
 import fr.umlv.smalljs.rt.JSObject;
 
 public final class RT {
-  private static final MethodHandle LOOKUP, REGISTER, TRUTH, GET_MH, METH_LOOKUP_MH;
+  private static final MethodHandle LOOKUP, REGISTER, TRUTH, GET_MH, METH_LOOKUP_MH, PARAMETER_COUNT_CHECK;
   static {
     var lookup = MethodHandles.lookup();
     try {
@@ -32,6 +27,7 @@ public final class RT {
 
       GET_MH = lookup.findVirtual(JSObject.class, "getMethodHandle", methodType(MethodHandle.class));
       METH_LOOKUP_MH = lookup.findStatic(RT.class, "lookupMethodHandle", methodType(MethodHandle.class, JSObject.class, String.class));
+      PARAMETER_COUNT_CHECK = lookup.findStatic(RT.class, "parameterCountCheck", methodType(MethodHandle.class, MethodHandle.class, int.class));
     } catch (NoSuchMethodException | IllegalAccessException e) {
       throw new AssertionError(e);
     }
@@ -45,40 +41,63 @@ public final class RT {
     return constant;
   }
 
+  private static MethodHandle parameterCountCheck(MethodHandle mh, int parameterCount) {
+    if (!mh.isVarargsCollector() && mh.type().parameterCount() != parameterCount) {
+      throw new Failure("wrong number of parameters " + (parameterCount - 1) + " but should be " + (mh.type().parameterCount() - 1));
+    }
+    return mh;
+  }
+
   public static CallSite bsm_funcall(Lookup lookup, String name, MethodType type) {
-    throw new UnsupportedOperationException("TODO bsm_funcall");
+    //throw new UnsupportedOperationException("TODO bsm_funcall");
     // take GET_MH method handle
+    var combiner = GET_MH;
+
+    // check parameters count
+    var parameterCheck = MethodHandles.insertArguments(PARAMETER_CHECK, 1, type.parameterCount() - 1);
+    combiner = MethodHandles.filterReturnValue(combiner, parameterCheck);
     // make it accept an Object (not a JSObject) as first parameter
+    combiner = combiner.asType(methodType(MethodHandle.class, Object.class));
     // create a generic invoker (MethodHandles.invoker()) on the parameter types without the qualifier
+    var invoker = MethodHandles.invoker(type.dropParameterTypes(0, 1));
     // drop the qualifier
+    invoker = MethodHandles.dropArguments(invoker, 0, Object.class);
     // use MethodHandles.foldArguments with GET_MH as combiner
+    var target = MethodHandles.foldArguments(invoker, combiner);
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   public static CallSite bsm_lookup(Lookup lookup, String name, MethodType type, String functionName) {
     throw new UnsupportedOperationException("TODO bsm_lookup");
-    //var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
-    //var globalEnv = classLoader.getGlobal();
+    var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
+    var globalEnv = classLoader.getGlobal();
     // get the LOOKUP method handle
+    var target = LOOKUP;
     // use the global environment as first argument and the functionName as second argument
+    target = MethodHandles.insertArguments();
     // create a constant callsite
+    return new VolatileCallSite(target);
   }
 
   public static Object bsm_fun(Lookup lookup, String name, Class<?> type, int funId) {
-    throw new UnsupportedOperationException("TODO bsm_fun");
-    //var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
-    //var globalEnv = classLoader.getGlobal();
-    //var fun = classLoader.getDictionary().lookupAndClear(funId);
-    //return ByteCodeRewriter.createFunction(fun.optName().orElse("lambda"), fun.parameters(), fun.body(), globalEnv);
+    //throw new UnsupportedOperationException("TODO bsm_fun");
+    var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
+    var globalEnv = classLoader.getGlobal();
+    var fun = classLoader.getDictionary().lookupAndClear(funId);
+    return ByteCodeRewriter.createFunction(fun.optName().orElse("lambda"), fun.parameters(), fun.body(), globalEnv);
   }
 
   public static CallSite bsm_register(Lookup lookup, String name, MethodType type, String functionName) {
-    throw new UnsupportedOperationException("TODO bsm_register");
-    //var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
-    //var globalEnv = classLoader.getGlobal();
+    // throw new UnsupportedOperationException("TODO bsm_register");
+    var classLoader = (FunClassLoader) lookup.lookupClass().getClassLoader();
+    var globalEnv = classLoader.getGlobal();
     //get the REGISTER method handle
+    var target = REGISTER;
     // use the global environment as first argument and the functionName as second argument
+    target = MethodHandles.insertArguments(target, 0, globalEnv, functionName);
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   @SuppressWarnings("unused")  // used by a method handle

@@ -1,5 +1,8 @@
 package fr.umlv.smalljs.jvminterp;
 
+import static fr.umlv.smalljs.rt.JSObject.UNDEFINED;
+import static fr.umlv.smalljs.stackinterp.Instructions.*;
+import static fr.umlv.smalljs.stackinterp.TagValues.encodeDictObject;
 import static java.lang.invoke.MethodType.genericMethodType;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.objectweb.asm.Opcodes.ACC_PUBLIC;
@@ -11,6 +14,7 @@ import static org.objectweb.asm.Opcodes.H_INVOKESTATIC;
 import static org.objectweb.asm.Opcodes.V21;
 
 import java.io.PrintWriter;
+import java.lang.classfile.Label;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -20,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import fr.umlv.smalljs.rt.Failure;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.ConstantDynamic;
@@ -166,53 +171,100 @@ public final class ByteCodeRewriter {
     private static void visit(Expr expression, JSObject env, MethodVisitor mv, FunDictionary dictionary) {
       switch(expression) {
         case Block(List<Expr> instrs, int lineNumber) -> {
-          throw new UnsupportedOperationException("TODO Block");
+          //throw new UnsupportedOperationException("TODO Block");
           // for each expression
-          // generate line numbers
-          // visit it
-          // if not an instruction and generate a POP
+            for (var inst: instrs) {
+                // generate line numbers
+                var label = new Label();
+                mv.visitLabel(label);
+                mv.visitLineNumber(instr.lineNumber(), label);
+                // visit it
+                visit(instr, env, mv, dictionary);
+                // if not an instruction and generate a POP
+                if (!(instr instanceof Expr.Instr)) {
+                    mv.visitInsn(POP);
+                }
+            }
         }
         case Literal<?>(Object value, int lineNumber) -> {
-          throw new UnsupportedOperationException("TODO Literal");
+          // throw new UnsupportedOperationException("TODO Literal");
           // switch on the value
+            switch (value) {
+                case Integer i -> {
+                    mv.visitLdcInsn(new ConstantDynamic("integerConst",
+                            "Ljava/lang/Object;", BSM_CONST, i));
+                }
+                case String s -> {
+                    mv.visitLdcInsn(s);
+                }
+                default -> throw new AssertionError("oops");
+            }
           // if it's an Integer, wrap it into a ConstantDynamic because the JVM doesn't have a primitive for boxed integer
           // if it's a String, use visitLDCInstr
           // otherwise report an error
         }
         case FunCall(Expr qualifier, List<Expr> args, int lineNumber) -> {
-          throw new UnsupportedOperationException("TODO FunCall");
+          //throw new UnsupportedOperationException("TODO FunCall");
           // visit the qualifier
-          // load "this"
-          // for each argument, visit it
-          // the name of the invokedynamic is either "builtincall" or "funcall"
-          // generate an invokedynamic with the right name
+            visit(qualifier, env, mv, dictionary);
+            // load "this"
+            mv.visitLdcInsn(new ConstantDynamic("undefined", "Ljava/lang/Object;",
+                    BSM_UNDEFINED));
+            // for each argument, visit it
+            for (var arg: args) {
+                visit(arg, env, mv, dictionary);
+            }
+            // the name of the invokedynamic is either "builtincall" or "funcall"
+            String name = "builtincall";
+            // generate an invokedynamic with the right name
+            var desc = "(" + "L.java/lang/Object;".repeat(args.size() + 2) + ")Ljava/lang/Object;";
+            mv.visitInvokeDynamicInsn(name, desc, BSM_FUNCALL);
         }
         case LocalVarAssignment(String name, Expr expr, boolean declaration, int lineNumber) -> {
-          throw new UnsupportedOperationException("TODO LocalVarAssignment");
+          //throw new UnsupportedOperationException("TODO LocalVarAssignment");
           // visit the expression
+            visit(expr, env, mv, dictionary);
           // lookup that name in the environment
+            var slotOrUndefined = env.lookup(name);
           // if it does not exist throw a Failure
-          // otherwise STORE the top of the stack at the local variable slot
+            if (slotOrUndefined == UNDEFINED) {
+                throw new Failure("unknown " + name);
+            }
+            // otherwise STORE the top of the stack at the local variable slot
+            mv.visitVarInsn(ASTORE, (int)slotOrUndefined);
         }
         case LocalVarAccess(String name, int lineNumber) -> {
-          throw new UnsupportedOperationException("TODO LocalVarAccess");
+          // throw new UnsupportedOperationException("TODO LocalVarAccess");
           // lookup to find if it's a local var access or a lookup access
+            var slotOfUndefined = env.lookup(name);
           // if undefined
-          //  generate an invokedynamic doing a lookup
-          // otherwise
-          //  load the local variable at the slot
+            if (slotOfUndefined == JSObject.UNDEFINED) {
+                //  generate an invokedynamic doing a lookup
+                mv.visitInvokeDynamicInsn("lookup", "()Ljava/lang/Object;", BSM_LOOKUP, name);
+            } else { // otherwise
+                //  load the local variable at the slot
+                mv.visitVarInsn(ALOAD, );
+            }
         }
         case Fun fun -> {
           Optional<String> optName = fun.optName();
-          throw new UnsupportedOperationException("TODO Fun");
+          //throw new UnsupportedOperationException("TODO Fun");
           // register the fun inside the fun directory and get the corresponding id
+            dictionary.register(fun);
           // emit a LDC to load the function corresponding to the id at runtime
+            mv.visitLdcInsn(new ConstantDynamic("fun", "Ljava/lang/Object;", BSM_FUN, id));
           // generate an invokedynamic doing a register with the function name
+            optName.ifPresent(name -> {
+                mv.visitInsn(DUP);
+                mv.visitInvokeDynamicInsn("register", "(Ljava/lang/Object;)V", BSM_REGISTER, name);
+            });
         }
         case Return(Expr expr, int lineNumber) -> {
           // throw new UnsupportedOperationException("TODO Return");
           // visit the return expression
+            visit(expr, env, mv, dictionary);
           // generate the bytecode
+            mv.visitInsn(ARETURN);
         }
         case If(Expr condition, Block trueBlock, Block falseBlock, int lineNumber) -> {
           throw new UnsupportedOperationException("TODO If");

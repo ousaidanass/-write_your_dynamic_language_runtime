@@ -172,13 +172,13 @@ public final class InstrRewriter {
 				visit(qualifier, env, buffer, dict);
 
 				//emit undefined
-				buffer.emit(CONST).emit(encodeDictObject(UNDEFINED, dict)):
+				buffer.emit(CONST).emit(encodeDictObject(UNDEFINED, dict));
 				// visit all arguments
 				for (var arg: args) {
 					visit(arg, env, buffer, dict);
 				}
 				// emit the funcall
-				buffer.emit(FUNCALL).emi(args.size());
+				buffer.emit(FUNCALL).emit(args.size());
 			}
 			case LocalVarAccess(String name, int lineNumber) -> {
 				// find if there is a local variable in the environment with the name
@@ -209,7 +209,7 @@ public final class InstrRewriter {
 				// if the name is present emit a code to register the function in the global environement
 				optName.ifPresent(name -> {
 					buffer.emit(DUP);
-					buffer.emit(REGISTER).emi(encodeDictObject(name, dict));
+					buffer.emit(REGISTER).emit(encodeDictObject(name, dict));
 				});
 			}
 			case Return(Expr expr, int lineNumber) -> {
@@ -239,7 +239,7 @@ public final class InstrRewriter {
 				// create a JSObject class
 				var clazz = JSObject.newObject(null);
 				// loop over all the field initializations
-				initMap().forEach((fieldName, expr) -> {
+				initMap.forEach((fieldName, expr) -> {
 				//  register the field name with the right slot
 				  clazz.register(fieldName, clazz.length());
 				//   visit the initialization expression
