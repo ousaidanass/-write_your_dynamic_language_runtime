@@ -47,7 +47,7 @@ public final class RT {
     }
     return mh;
   }
-
+  /*
   public static CallSite bsm_funcall(Lookup lookup, String name, MethodType type) {
     //throw new UnsupportedOperationException("TODO bsm_funcall");
     // take GET_MH method handle
@@ -66,6 +66,69 @@ public final class RT {
     var target = MethodHandles.foldArguments(invoker, combiner);
     // create a constant callsite
     return new ConstantCallSite(target);
+  }
+*/
+  public static CallSite bsm_funcall(Lookup lookup, String name, MethodType type) {
+    return new InliningCache(type, 1);
+  }
+
+  private static class InliningCache extends MutableCallSite {
+    private static final MethodHandle SLOW_PATH, POINTER_CHECK, FALLBACK_PATH;
+    static {
+      var lookup = MethodHandles.lookup();
+      try {
+        SLOW_PATH = lookup.findVirtual(InliningCache.class, "slowPath", methodType(MethodHandle.class, Object.class, Object.class));
+        POINTER_CHECK = lookup.findStatic(InliningCache.class, "pointerCheck", methodType(Boolean.class, Object.class, Object.class));
+        FALLBACK_PATH = lookup.findVirtual(InliningCache.class, "fullbackPath", methodType(MethodHandle.class, Object.class, Object.class));
+      } catch (NoSuchMethodException | IllegalAccessException e) {
+        throw new AssertionError(e);
+      }
+    }
+
+    private static final int MAX_DEPTH = 3;
+
+    private final int depth;
+
+    private final InliningCache root;
+
+    public InliningCache(MethodType type, int depth) {
+      this.depth = depth;
+      super(type);
+      this.root = this;
+      setTarget(MethodHandles.foldArguments(MethodHandles.exactInvoker(type), SLOW_PATH.bindTo(this)));
+    }
+
+    public InliningCache(MethodType type, int depth, InliningCache root) {
+      this.depth = depth;
+      this.root = root;
+      super(type);
+      setTarget(MethodHandles.foldArguments(MethodHandles.exactInvoker(type), SLOW_PATH.bindTo(this)));
+    }
+
+    private static boolean pointerCheck(Object qualifier, JSObject expectedQualifier) {
+      return qualifier == expectedQualifier;
+    }
+
+    private static MethodHandle fallbackPath(Object qualifier, Object receiver) {
+      var jsObject = (JSObject)qualifier;
+      var mh = jsObject.getMethodHandle();
+      parameterCheck(mh, type().parameterCount() - 1);
+      return MethodHandles.dropArguments(mh, 0, Object.class).withVarargs(mh.isVarArgsCollector()).asType(type());
+    }
+
+    private MethodHandle slowPath(Object qualifier, Object receiver) {
+      var target = fallbackPath(qualifier, receiver);
+      if (++depth == MAX_DEPTH) {
+        root.setTarget(MethodHandles.foldArguments(MethodHandles.exactInvoker(type), FALLBACK_PATH.bindTo(this)));
+        return target;
+      }
+      var check = MethodHandles.insertArguments(POINTER_CHECK, 1, jsObject);
+      var guard = MethodHandles.guardWithTest(
+              check, target, new InliningCache(type()).dynamicInvoker()
+      );
+      setTarget(guard);
+      return target;
+    }
   }
 
   public static CallSite bsm_lookup(Lookup lookup, String name, MethodType type, String functionName) {
@@ -105,9 +168,11 @@ public final class RT {
     return o != null && o != UNDEFINED && o != Boolean.FALSE;
   }
   public static CallSite bsm_truth(Lookup lookup, String name, MethodType type) {
-    throw new UnsupportedOperationException("TODO bsm_truth");
+    //throw new UnsupportedOperationException("TODO bsm_truth");
     // get the TRUTH method handle
+    var target = TRUTH;
     // create a constant callsite
+    return new ConstantCallSite(target);
   }
 
   public static CallSite bsm_get(Lookup lookup, String name, MethodType type, String fieldName) {

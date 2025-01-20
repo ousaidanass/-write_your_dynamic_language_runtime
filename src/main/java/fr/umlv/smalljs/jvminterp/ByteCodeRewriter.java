@@ -267,11 +267,22 @@ public final class ByteCodeRewriter {
             mv.visitInsn(ARETURN);
         }
         case If(Expr condition, Block trueBlock, Block falseBlock, int lineNumber) -> {
-          throw new UnsupportedOperationException("TODO If");
+          // throw new UnsupportedOperationException("TODO If");
           // visit the condition
+            visit(condition, env, mv, dictionary);
           // generate an invokedynamic to transform an Object to a boolean using BSM_TRUTH
+            mv.visitInvokeDynamicInsn("truth", "(Ljava/lang/Object;)Z",
+                    BSM_METHODCALL);
+            var faseLabel = new Label();
+            mv.visitJumpInsn(IFEQ, falseLabel);
           // visit the true block
+            var endLabel = new Label();
+            visit(trueBlock, env, mv, dictionary);
+            mv.visitJumpInsn(GOTO, endLabel);
           // visit the false block
+            mv.visitLabel(faseLabel);
+            visit(falseBlock, env, mv, dictionary);
+            mv.visitLabel(endLabel);
         }
         case New(Map<String, Expr> initMap, int lineNumber) -> {
           throw new UnsupportedOperationException("TODO New");
